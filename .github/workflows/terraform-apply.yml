@@ -21,6 +21,11 @@ jobs:
     # in GitHub repo Settings > Environments with required reviewers. Without
     # that one-time setup, this job runs unattended on every merge.
     environment: production
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
