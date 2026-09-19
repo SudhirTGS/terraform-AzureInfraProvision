@@ -1,0 +1,61 @@
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      infra_dir:
+        description: "Path under infra/ to destroy, e.g. azure_sql_database/commerceqlserver-796321-productdb"
+        required: true
+        type: string
+
+permissions:
+  id-token: write # required for Azure OIDC login
+  contents: read
+
+concurrency:
+  group: terraform-destroy-${{ github.event.inputs.infra_dir }}
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    # Same human-approval gate as apply — destroying is at least as
+    # consequential (arguably more, since data loss is irreversible).
+    environment: production
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      ARM_USE_OIDC: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate infra directory exists
+        run: |
+          if [ ! -d "infra/${{ inputs.infra_dir }}" ]; then
+            echo "infra/${{ inputs.infra_dir }} does not exist." >&2
+            exit 1
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform init
+        working-directory: infra/${{ inputs.infra_dir }}
+        run: terraform init -input=false
+
+      - name: Terraform destroy
+        working-directory: infra/${{ inputs.infra_dir }}
+        # Terraform still needs every variable resolvable to build the
+        # destroy plan, even though nothing is being created.
+        env:
+          TF_VAR_sql_admin_password: ${{ secrets.SQL_ADMIN_PASSWORD }}
+        run: terraform destroy -input=false -auto-approve
